@@ -112,6 +112,22 @@
   BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
   TABLESPACE "DATA" ;
 
+--------------------------------------------------------
+--  DDL for Table TWEETS_SENTIMENT
+--------------------------------------------------------
+
+  CREATE TABLE "NHL"."TWEETS_SENTIMENT" 
+   (	"TWEET_ID" NUMBER, 
+	"SCORE" FLOAT(126), 
+	"EMOTION" VARCHAR2(200 BYTE) COLLATE "USING_NLS_COMP", 
+	 )  DEFAULT COLLATION "USING_NLS_COMP" SEGMENT CREATION IMMEDIATE 
+  PCTFREE 10 PCTUSED 40 INITRANS 10 MAXTRANS 255 
+ COLUMN STORE COMPRESS FOR QUERY HIGH ROW LEVEL LOCKING LOGGING
+  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645
+  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1
+  BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
+  TABLESPACE "DATA" ;
+
 
 --------------------------------------------------------
 --  Constraints for Table TWEETS
@@ -147,3 +163,38 @@
 
   ALTER TABLE "NHL"."USERS" ADD CONSTRAINT "FK_USERS" FOREIGN KEY ("TWEET_ID")
 	  REFERENCES "NHL"."TWEETS" ("TWEET_ID") ENABLE;
+
+--------------------------------------------------------
+--  Ref Constraints for Table TWEETS_SENTIMENT
+--------------------------------------------------------
+
+  ALTER TABLE "NHL"."TWEETS_SENTIMENT" ADD PRIMARY KEY ("TWEET_ID") ENABLE;
+
+  ALTER TABLE "NHL"."TWEETS_SENTIMENT" ADD CONSTRAINT "TWEETS_SENTIMENT_FK" FOREIGN KEY ("TWEET_ID")
+	  REFERENCES "NHL"."TWEETS_SENTIMENT" ("TWEET_ID") ENABLE;   
+
+--------------------------------------------------------
+--  Procedure for Sentiment Analysis
+--------------------------------------------------------
+create or replace procedure sentiment_analysis (tweet_id NUMBER) AS
+   score_result NUMBER := 0;
+   emotion_result VARCHAR2(50) := '';
+
+BEGIN
+
+	SELECT CTX_DOC.SENTIMENT_AGGREGATE('twittersentiments_idx',tweet_id) INTO score_result FROM DUAL;
+    IF score_result < -60 THEN
+		emotion_result := 'Strongly Negative';
+	ELSIF score_result < -20 THEN
+		emotion_result := 'Negative';
+	ELSIF score_result <= 20 THEN
+		emotion_result := 'Neutral';
+	ELSIF score_result < 61 THEN
+		emotion_result := 'Positive';
+	ELSE
+		emotion_result := 'Strongly Positive';
+	END IF;
+
+    INSERT INTO tweets_sentiment (TWEET_ID,EMOTION,SCORE) VALUES (tweet_id, emotion_result, score_result);
+
+END;

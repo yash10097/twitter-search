@@ -13,11 +13,11 @@ def exit_loop(signum,frame):
     global terminate          
     terminate = True
 
+
 def select_from_db(query, args_dict, connection):
     cursor = connection.cursor()
     items = []
     get_query = cursor.execute(query, args_dict)
-    #print(get_query)
     col_names = [row[0] for row in cursor.description]
     for row in get_query:
         data = {}
@@ -26,13 +26,18 @@ def select_from_db(query, args_dict, connection):
         items.append(data)
     cursor.close()
     return items
-    
+
+
+def call_procedure(proc_name, args, connection):
+    cursor = connection.cursor()
+    cursor.callproc(proc_name, args)
+    cursor.close()      
+
 
 def insert_into_db(query, args_dict, connection):
     cursor = connection.cursor()
     try:
         cursor.execute(query, args_dict)
-        #connection.commit()
         return True
     except Exception as e:
         print(e)
@@ -47,8 +52,6 @@ def insert_into_db(query, args_dict, connection):
 def process_input(tweet, connection):
     my_json = tweet.decode('UTF-8')
     data = json.loads(my_json)
-    #s = json.dumps(data, indent=4, sort_keys=True)
-    #print(s)
     tweet = data.get('data')
     if not tweet:
         return
@@ -79,8 +82,7 @@ def process_input(tweet, connection):
         "source": tweet.get('source'), 
         "text": tweet.get('text'), 
         "matching_rules": data['matching_rules'][0]['id']
-        }
-    #print(tweets_args)
+    }
     if not insert_into_db(db.insertion_tweets_query, tweets_args, connection):
         return
 
@@ -110,7 +112,6 @@ def process_input(tweet, connection):
                 "username": user.get('username'), 
                 "verified": user.get('verified')
             }
-            #print(users_args)
             insert_into_db(db.insertion_users_query, users_args, connection)
 
     entities = tweet.get('entities')
@@ -125,7 +126,6 @@ def process_input(tweet, connection):
                     "username": mention.get('username'), 
                     "user_id": mention.get('id')
                 }
-                #print(mentions_args)
                 insert_into_db(db.insertion_mentions_query, mentions_args, connection)
 
         hashtags = entities.get('hashtags')
@@ -137,7 +137,6 @@ def process_input(tweet, connection):
                     "end_pos": hashtag.get('end'), 
                     "tag": hashtag.get('tag')
                 }
-                #print(hashtags_args)
                 insert_into_db(db.insertion_hashtags_query, hashtags_args, connection)
 
     context_annotations = tweet.get('context_annotations')
@@ -158,8 +157,10 @@ def process_input(tweet, connection):
                 "entity_name": entity.get('name'), 
                 "entity_description": entity.get('description')
             }
-            #print(contexts_args)
             insert_into_db(db.insertion_contexts_query, contexts_args, connection)
+    
+    call_procedure('sentiment_analysis', [tweet.get('id')], connection)
+
 
     
 
@@ -176,15 +177,18 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, exit_loop)
     signal.signal(signal.SIGQUIT, exit_loop)
 
-    with requests.get(url = URL, headers = HEADERS, stream=True) as resp:
-        for line in resp.iter_lines():
-            if line:
-                t = threading.Thread(target=process_input, args=(line, connection))
-                if terminate:
-                    print('\nTerminating...')
-                    break
-                threads.append(t)
-                t.start()
+    try:
+        with requests.get(url = URL, headers = HEADERS, stream=True) as resp:
+            for line in resp.iter_lines():
+                if line:
+                    t = threading.Thread(target=process_input, args=(line, connection))
+                    if terminate:
+                        print('\nTerminating...')
+                        break
+                    threads.append(t)
+                    t.start()
+    except Exception as e:
+        print(e)
 
     for t in threads:
         t.join()    
